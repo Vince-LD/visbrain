@@ -519,6 +519,13 @@ class SceneObj(object):
             assert zoom > 0, "`zoom` should be > 0"
             if isinstance(sub.camera, scene.cameras.TurntableCamera):
                 sub.camera.scale_factor /= zoom
+                #IN EEG CASE, camera.distance is not set so we must set it. Temporary, should be added directy in EEG object camera creation.
+                if sub.camera.distance is not None:
+                    sub.camera.distance /= zoom
+                else:
+                    sub.camera.distance = sub.camera.scale_factor * 4
+
+
             elif isinstance(sub.camera, scene.cameras.PanZoomCamera) or \
                     isinstance(sub.camera, FixedCam):
                 r = sub.camera.rect
@@ -526,13 +533,20 @@ class SceneObj(object):
                 left = r.center[0] - (prop[0] / 2.)
                 bottom = r.center[1] - (prop[1] / 2.)
                 sub.camera.rect = (left, bottom, prop[0], prop[1])
+
         # Camera :
         if camera_state == {}:
             camera_state = self._camera_state
         if isinstance(sub.camera, scene.cameras.TurntableCamera):
             rotate_turntable(fixed=rotate, camera_state=camera_state,
                              camera=sub.camera)
+
+
         sub.camera.set_default_state()
+
+        # print("SUB CAMERA", self._grid)
+
+        # sub.camera
         PROFILER('%s added to the scene' % repr(obj))
         logger.info('    %s added to the scene' % repr(obj))
 
@@ -608,10 +622,17 @@ class SceneObj(object):
             Specify if the exported figure have to contains a transparent
             background.
         """
+        # # Vincent's update
+        # self.camera.depth_value=10
+
         kwargs = dict(print_size=print_size, dpi=dpi, factor=factor,
                       autocrop=autocrop, unit=unit, region=region,
                       bgcolor=bgcolor, transparent=transparent)
         self._gl_uniform_transforms()
+
+
+
+
         write_fig_canvas(saveas, self.canvas,
                          widget=self.canvas.central_widget, **kwargs)
 

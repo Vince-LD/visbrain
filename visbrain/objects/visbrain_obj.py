@@ -190,11 +190,16 @@ class VisbrainObject(_VisbrainObj):
             camera = obj._get_camera()
         else:
             camera = self._get_camera()
-        canvas = VisbrainCanvas(axis=axis, show=show, name=self._name,
-                                bgcolor=color2vb(bgcolor), camera=camera,
-                                shortcuts=self._shortcuts, **kwargs)
-        self._csize = canvas.canvas.size
-        self.set_shortcuts_to_canvas(canvas)
+
+        # Vincent's correction: check if a canva already exists so we can reuse it and take multiple screenshots/render aswell a previewing the results!!!
+        if not hasattr(self, 'canvas'):
+            canvas = VisbrainCanvas(axis=axis, show=show, name=self._name,
+                                    bgcolor=color2vb(bgcolor), camera=camera,
+                                    shortcuts=self._shortcuts, **kwargs)
+            self._csize = canvas.canvas.size
+            self.set_shortcuts_to_canvas(canvas)
+        else:
+            canvas = self.canvas
         if not hasattr(self._node.parent, 'name'):
             self._node.parent = canvas.wc.scene
         return canvas

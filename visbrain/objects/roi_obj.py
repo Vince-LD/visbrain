@@ -526,12 +526,15 @@ class RoiObj(_Volume):
                 self.mesh = BrainMesh(vertices=vert_hdr, faces=faces,
                                       parent=self._node)
                 self.mesh.translucent = translucent
+
             else:
                 logger.debug("ROI mesh already exist")
                 self.mesh.set_data(vertices=vert_hdr, faces=faces)
             if unique_color:
                 self.mesh.add_overlay(data, cmap=col_unique,
                                       interpolation='linear', to_overlay=0)
+
+            self.mesh.update_gl_state(depth_test=True)
         else:
             raise ValueError("No vertices found for this ROI")
 
@@ -595,6 +598,7 @@ class RoiObj(_Volume):
         self.mesh._camera.scale_factor = sc
         self.mesh._camera.distance = 4 * sc
         self.mesh._camera.center = center
+
         self.camera = self.mesh._camera
         return self.mesh._camera
 
@@ -740,18 +744,18 @@ class RoiObj(_Volume):
     def mask_color(self, value):
         """Set mask_color value."""
         self.mesh.mask_color = value
-
-    # ----------- CAMERA -----------
-    @property
-    def camera(self):
-        """Get the camera value."""
-        return self._camera
-
-    @camera.setter
-    @wrap_setter_properties
-    def camera(self, value):
-        """Set camera value."""
-        self.mesh.set_camera(value)
+    #
+    # # ----------- CAMERA -----------
+    # @property
+    # def camera(self):
+    #     """Get the camera value."""
+    #     return self.camera
+    #
+    # @camera.setter
+    # @wrap_setter_properties
+    # def camera(self, value):
+    #     """Set camera value."""
+    #     self.mesh.set_camera(value)
 
 
 class CombineRoi(_CombineVolume):
@@ -775,7 +779,7 @@ class CombineRoi(_CombineVolume):
     @property
     def camera(self):
         """Get the camera value."""
-        return self._camera
+        return self.camera
 
     @camera.setter
     def camera(self, value):

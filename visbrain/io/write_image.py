@@ -388,7 +388,6 @@ def write_fig_canvas(filename, canvas, widget=None, autocrop=False,
     if transparent:
         canvas.bgcolor = [0.] * 4
 
-    # Render the canvas :
     try:
         img = canvas.render(region=region)
     except:

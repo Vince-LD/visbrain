@@ -454,6 +454,9 @@ class BrainVisual(Visual):
         """
         if camera is not None:
             self._camera = camera
+            # Vincent's update to correctly display the mesh
+            self._camera.depth_value = 10
+
             self.shared_program.frag['camtf'] = self._camera.transform
             self.update()
 
