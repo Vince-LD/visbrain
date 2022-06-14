@@ -468,7 +468,7 @@ class RoiObj(_Volume):
     ###########################################################################
 
     def select_roi(self, select=.5, unique_color=False, roi_to_color=None,
-                   smooth=3, translucent=False):
+                   smooth=3, translucent=False, smooth_joints=True):
         """Select several Region Of Interest (ROI).
 
         Parameters
@@ -509,14 +509,26 @@ class RoiObj(_Volume):
                 col_unique[..., -1] = 1.
                 logger.info("    Random color are going to be used.")
             # Get vertices and faces of each ROI :
-            for i, k in enumerate(select):
-                v, f = self._select_roi(self._vol.copy(), int(k), smooth)
-                # Concatenate vertices / faces :
-                faces = np.r_[faces, f + faces.max() + 1] if faces.size else f
-                vert = np.r_[vert, v] if vert.size else v
-                # Concatenate color :
-                col = np.full((v.shape[0],), i)
-                data = np.r_[data, col] if data.size else col
+            if smooth_joints:
+                selected_volume = np.isin(self._vol, select) * self._vol
+
+                vert, faces = self._select_roi(selected_volume, select, smooth)
+
+                voxel_indexes = np.argwhere(selected_volume)
+                vol_kdt = cKDTree(voxel_indexes)
+                # Closest voxel coordinates for each vertex
+                closest_points = voxel_indexes[vol_kdt.query(vert, k=1)[1]]
+                # Roi value at each vertex
+                data = selected_volume[closest_points[:,0],closest_points[:,1],closest_points[:,2]]
+            else:
+                for i, k in enumerate(select):
+                    v, f = self._select_roi(self._vol.copy(), int(k), smooth)
+                    # Concatenate vertices / faces :
+                    faces = np.r_[faces, f + faces.max() + 1] if faces.size else f
+                    vert = np.r_[vert, v] if vert.size else v
+                    # Concatenate color :
+                    col = np.full((v.shape[0],), i)
+                    data = np.r_[data, col] if data.size else col
         if vert.size:
             # Apply hdr transformation to vertices :
             vert_hdr = self._hdr.map(vert)[:, 0:-1]
