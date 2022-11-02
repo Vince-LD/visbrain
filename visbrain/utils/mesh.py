@@ -272,7 +272,7 @@ def laplacian_smoothing(vertices, faces, n_neighbors=-1):
     return new_vertices
 
 
-def volume_to_data(vol, vertices, select=None, dist_threshold=3.):
+def volume_to_data(vol, vertices, select=None, dist_threshold=3., fill_value=0.):
     """For each given vertex, gets the closest voxel value from the volume
     (distance wise).
 
@@ -317,5 +317,12 @@ def volume_to_data(vol, vertices, select=None, dist_threshold=3.):
 
     # Voxel value at each vertex
     data = selected_volume[valid_points[:,0],valid_points[:,1],valid_points[:,2]]
+           
+    if fill_value != 0:
+        discarded_vertices = np.where(dist>dist_threshold)[0]
+        filled_data = np.full(discarded_vertices.shape[0], fill_value)
+
+        data = np.concatenate(data, filled_data)
+        valid_vertices = np.concatenate(valid_vertices, discarded_vertices)
 
     return data, valid_vertices
