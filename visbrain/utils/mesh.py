@@ -322,7 +322,7 @@ def volume_to_data(vol, vertices, select=None, dist_threshold=3., fill_value=0.)
         discarded_vertices = np.where(dist>dist_threshold)[0]
         filled_data = np.full(discarded_vertices.shape[0], fill_value)
 
-        data = np.concatenate(data, filled_data)
-        valid_vertices = np.concatenate(valid_vertices, discarded_vertices)
+        data = np.concatenate((data, filled_data))
+        valid_vertices = np.concatenate((valid_vertices, discarded_vertices))
 
     return data, valid_vertices
