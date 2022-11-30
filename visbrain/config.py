@@ -44,7 +44,7 @@ try:
     ip = get_ipython()
     CONFIG['MPL_RENDER'] = True
     import vispy
-    vispy.use(app='osmesa')
+    vispy.use(app='PyQt5')
 except NameError:
     pass
 
