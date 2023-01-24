@@ -299,7 +299,7 @@ def read_freesurfer_mesh(files):
         faces = np.r_[f_l, f_r + f_l.max() + 1]
         # Left / right construction
         l_index = np.ones((v_l.shape[0],), dtype=bool)
-        r_index = np.zeros((v_l.shape[0],), dtype=bool)
+        r_index = np.zeros((v_r.shape[0],), dtype=bool)
         lr_index = np.r_[l_index, r_index]
         logger.info('    Build left and right hemispheres')
     return vert, faces, lr_index
