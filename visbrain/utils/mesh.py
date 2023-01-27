@@ -13,7 +13,8 @@ from scipy.spatial import cKDTree
 
 
 __all__ = ('vispy_array', 'convert_meshdata', 'volume_to_mesh',
-           'smoothing_matrix', 'mesh_edges', 'laplacian_smoothing', 'volume_to_data')
+           'smoothing_matrix', 'mesh_edges', 'laplacian_smoothing', 
+           'volume_to_data')
 
 
 logger = logging.getLogger('visbrain')
@@ -272,7 +273,30 @@ def laplacian_smoothing(vertices, faces, n_neighbors=-1):
     return new_vertices
 
 
-def volume_to_data(vol, vertices, select=None, dist_threshold=3., fill_value=0.):
+def coregister_mesh_to_vol(vert, vol_mask, post_factor=1, affine=None):
+    if affine is None:
+        vox_xyz = np.argwhere(vol_mask)
+
+        vert_xyz_size = np.ptp(vert, axis=0)
+        vol_xyz_size = np.ptp(vox_xyz, axis=0)
+
+
+        scale_factor = vol_xyz_size / vert_xyz_size
+        vert = vert * scale_factor * post_factor
+
+        vert_cent = vert_xyz_size / 2 + np.min(vert, axis=0) + 1
+        vol_cent = vol_xyz_size / 2 + np.min(vox_xyz, axis=0) + 1
+
+        trans_factor = vol_cent - vert_cent
+        vert += trans_factor
+
+    else:
+        vert = vert - affine[:3, 3]
+
+    return vert
+
+
+def volume_to_data(vol, vertices, select=None, radius=3., fill_value=0, coreg=None):
     """For each given vertex, gets the closest voxel value from the volume
     (distance wise).
 
@@ -285,11 +309,19 @@ def volume_to_data(vol, vertices, select=None, dist_threshold=3., fill_value=0.)
     select : list/array_like | None
         The values (Rois) from the volume to use. Useful if the objective is
         to take only a subset of the total volume.
-    dist_threshold : float | .3
+    radius : float | .3
         Maximum distance from which a vertex can get a voxel value. If you
         observe holes in the mesh colors, try increase this parameter.
         However, keep as low as possible if you use the "select" parameter
         as it can decrease the precision on the edge of the given volume.
+    coreg : True | np.ndarray | None
+        * If True will attemps to ofset xyz vertices position to fit the 
+        voxel position. This method is very simplistic and quite raw.
+        * We recommand you to use the affine contained in the NIfTI file 
+        which is a numpy array of 4x4. We use the last column to offset the 
+        position of all vertices. This allow for perfect matching of the 
+        surface and CORRESPONDING VOLUME (provided the volume is the same 
+        brain as the template surface used).
 
     Returns
     -------
@@ -305,6 +337,13 @@ def volume_to_data(vol, vertices, select=None, dist_threshold=3., fill_value=0.)
     else:
         selected_volume = vol
 
+    if coreg is True:
+        vol_mask = np.where(selected_volume, 1, 0)
+        vertices = coregister_mesh_to_vol(vertices, vol_mask, post_factor=1, affine=None)
+    if isinstance(coreg, np.ndarray):
+        vol_mask = np.where(selected_volume, 1, 0)
+        vertices = coregister_mesh_to_vol(vertices, vol_mask, post_factor=1, affine=coreg)
+
     voxel_indexes = np.argwhere(selected_volume)
     vol_kdt = cKDTree(voxel_indexes)
 
@@ -312,17 +351,20 @@ def volume_to_data(vol, vertices, select=None, dist_threshold=3., fill_value=0.)
     dist, ind = vol_kdt.query(vertices, k=1)
     closest_points = voxel_indexes[ind]
 
-    valid_vertices = np.where(dist<=dist_threshold)[0]
+    valid_vertices = np.where(dist<=radius)[0]
     valid_points = closest_points[valid_vertices]
 
     # Voxel value at each vertex
     data = selected_volume[valid_points[:,0],valid_points[:,1],valid_points[:,2]]
-           
+
     if fill_value != 0:
-        discarded_vertices = np.where(dist>dist_threshold)[0]
+        discarded_vertices = np.where(dist>radius)[0]
         filled_data = np.full(discarded_vertices.shape[0], fill_value)
 
         data = np.concatenate((data, filled_data))
         valid_vertices = np.concatenate((valid_vertices, discarded_vertices))
-
+        
     return data, valid_vertices
+
+
+

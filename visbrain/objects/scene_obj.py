@@ -679,7 +679,8 @@ class SceneObj(object):
                                      widget=self.canvas.central_widget)
         self.canvas.events.key_press.connect(key_pressed)
 
-    def render(self):
+    def render(self, print_size=None, unit='centimeter', dpi=300.,
+                     factor=1., transparent=False):
         """Render the canvas.
 
         Returns
@@ -689,7 +690,81 @@ class SceneObj(object):
             components.
         """
         self._gl_uniform_transforms()
-        return self.canvas.render()
+        canvas = self.canvas
+        # Get the size of the canvas and backend :
+        c_size = canvas.size
+        b_size = canvas._backend._physical_size
+        
+        # If the GUI is displayed, c_size and b_size should be equals. If not,
+        # and if the canvas is resizable, the canvas might have a different size
+        # because it hasn't been updated. In that case, we force the canvas to have
+        # the same size as the backend :
+        if c_size != b_size:
+            canvas.size = b_size
+
+        # Backup size / background color :
+        backup_size = canvas.physical_size
+
+        # dpi checking :
+        if print_size is None:
+            logger.warning("dpi parameter is not active if `print_size` is None. "
+                        "Use for example `print_size=(5, 5)`")
+
+        # User select a desired print size with at a specific dpi :
+        if print_size is not None:
+            # Type checking :
+            if not isinstance(print_size, (tuple, list)):
+                raise TypeError("The print_size must either be a tuple or a list "
+                                "describing the (width, height) of the"
+                                " image in %s" % unit)
+            # Check print size :
+            if not all([isinstance(k, (int, float)) for k in print_size]):
+                raise TypeError("print_size must be a tuple describing the "
+                                "(width, height) of the image in %s" % unit)
+
+            print_size = np.asarray(print_size)
+            # If the user select the auto-croping option, the canvas must be render
+            # before :
+            
+            # There is no autocrop so we can skip the if found in io.write_fig_canvas
+            s_output = b_size
+            # Unit conversion :
+            if unit == 'millimeter':
+                mult = 1. / (10. * 2.54)
+            elif unit == 'centimeter':
+                mult = 1. / 2.54
+            elif unit == 'pixel':
+                mult = 1. / dpi
+            elif unit == 'inch':
+                mult = 1.
+            else:
+                raise ValueError("The unit must either be 'millimeter', "
+                                "'centimeter', 'pixel' or 'inch' and not " + unit)
+            # Get the factor to apply to the canvas size. This factor is defined as
+            # the mean required float to get either the desired width/height.
+            # Note that the min or the max can also be used instead.
+            factor = np.mean(print_size * dpi * mult / np.asarray(s_output))
+
+        # Multply the original canvas size :
+        if factor is not None:
+            # Get the new width and height :
+            new_width = int(b_size[0] * factor)
+            new_height = int(b_size[1] * factor)
+            # Set it to the canvas, backend and the widget :
+            canvas._backend._vispy_set_physical_size(new_width, new_height)
+            canvas.size = (new_width, new_height)
+
+        if transparent:
+            canvas.bgcolor = [0.] * 4
+        
+        rendered_img = canvas.render()
+
+        # Set to the canvas it's previous size :
+        canvas._backend._physical_size = backup_size
+        canvas.size = backup_size
+
+        return rendered_img
+        # return self.canvas.render()
 
     def preview(self, mpl=False):
         """Previsualize the result.

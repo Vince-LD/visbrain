@@ -12,7 +12,7 @@ from ..utils import (mesh_edges, smoothing_matrix, rotate_turntable)
 from ..io import (is_nibabel_installed, is_pandas_installed,
                   add_brain_template, remove_brain_template, read_x3d,
                   read_gii, read_obj, is_freesurfer_mesh_file,
-                  read_freesurfer_mesh)
+                  read_freesurfer_mesh, read_freesurfer_sulcus)
 
 logger = logging.getLogger('visbrain')
 
@@ -54,6 +54,19 @@ class BrainObj(VisbrainObject):
         hemisphere.
     hemisphere : {'left', 'both', 'right'}
         The hemisphere to plot.
+    sulcus : True | string | list or tuple | np.ndarray | None (default)
+        * If None, sulcus colors are not added to the brain surface.
+        * If True, visbrain will look for the sulcus file that correspond to the 
+        selected template (the sulcus file is name [template name]_sulcus.npy)
+        * You can also input a string that has the name of another template than the 
+        one you are using for the surface (useful when you have a orig and wm 
+        template but didn't save sulcus for both)
+        * As for the name argument, you can input a list of file paths that points to
+        'surf/[rh/lh].sulc' in your Freesurfer directory. The given file must 
+        correspond to the surface used. You must provide as much files as 
+        the number of hemispheres you use.
+        * Finally, you can input an numpy array of boolean of size n_vertices. In this
+        case, a True value will be displayed white and a False will be dark grey.
     translucent : bool | True
         Use translucent (True) or opaque (False) brain.
     transform : VisPy.visuals.transforms | None
@@ -93,7 +106,7 @@ class BrainObj(VisbrainObject):
     ###########################################################################
 
     def __init__(self, name, vertices=None, faces=None, normals=None,
-                 lr_index=None, hemisphere='both', translucent=True,
+                 lr_index=None, hemisphere='both', translucent=False,
                  sulcus=False, invert_normals=False, transform=None,
                  parent=None, verbose=None, _scale=1., **kw):
         """Init."""
@@ -120,6 +133,8 @@ class BrainObj(VisbrainObject):
                       invert_normals, sulcus)
         self.translucent = translucent
 
+        self._get_camera()
+
     def __len__(self):
         """Get the number of vertices."""
         return self.vertices.shape[0]
@@ -132,9 +147,12 @@ class BrainObj(VisbrainObject):
         if not all([isinstance(k, np.ndarray) for k in [vertices, faces]]):
             to_load = None
             name_npz = name + '.npz'
+            template_found = False
             # Identify if the template is already downloaded or not :
             if name in self._df_get_downloaded():
                 to_load = self._df_get_file(name_npz, download=False)
+                print('Template found')
+                template_found = True
             elif name_npz in self._df_get_downloadable():  # need download
                 to_load = self._df_download_file(name_npz)
             assert isinstance(to_load, str)
@@ -146,13 +164,19 @@ class BrainObj(VisbrainObject):
 
         # Sulcus :
         if sulcus is True:
-            if not self._df_is_downloaded('sulcus.npy'):
+            if name not in ['inflated', 'white', 'sphere'] and template_found and self._df_is_downloaded(name + '_sulcus.npy'):
+                    sulcus_file = self._df_get_file(name + '_sulcus.npy')
+            elif not self._df_is_downloaded('sulcus.npy'):
                 sulcus_file = self._df_download_file('sulcus.npy')
             else:
                 sulcus_file = self._df_get_file('sulcus.npy')
             sulcus = np.load(sulcus_file)
-        elif isinstance(sulcus, np.ndarray):
-            sulcus = sulcus
+
+        elif isinstance(sulcus, str) and self._df_is_downloaded(sulcus + '_sulcus.npy'):
+            logger.info(f'Opening sulcus from template {sulcus}')
+            sulcus = np.load(self._df_get_file(sulcus + '_sulcus.npy'))
+        elif sulcus and is_freesurfer_mesh_file(sulcus, extensions=['.sulc']):
+            sulcus = read_freesurfer_sulcus(sulcus)
         else:
             sulcus = None
         # _______________________ CHECKING _______________________
@@ -183,7 +207,7 @@ class BrainObj(VisbrainObject):
         n = self.mesh._normals
         lr = self.mesh._lr_index
         add_brain_template(save_as, v, f, normals=n, lr_index=lr,
-                           tmpfile=tmpfile)
+                           tmpfile=tmpfile, sulcus=self.mesh._sulcus)
 
     def remove(self):
         """Remove a brain template."""
@@ -193,7 +217,7 @@ class BrainObj(VisbrainObject):
         """Get the list of all installed templates."""
         return self._df_get_downloaded(with_ext=False, exclude=['sulcus'])
 
-    def _define_mesh(self, vertices, faces, normals, lr_index, hemisphere,
+    def  _define_mesh(self, vertices, faces, normals, lr_index, hemisphere,
                      invert_normals, sulcus):
         """Define brain mesh."""
         if not hasattr(self, 'mesh'):
@@ -687,6 +711,12 @@ class BrainObj(VisbrainObject):
     def normals(self):
         """Get the normals value."""
         return self.__hemisphere_correction(self.mesh._normals)
+
+    # ----------- VERTICES -----------
+    @property
+    def sulcus(self):
+        """Get the vertices value."""
+        return self.__hemisphere_correction(self.mesh._sulcus)
 
     # ----------- HEMISPHERE -----------
     @property
