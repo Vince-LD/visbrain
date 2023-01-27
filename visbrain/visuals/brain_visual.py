@@ -316,6 +316,7 @@ class BrainVisual(Visual):
         sulcus = np.zeros((n,), dtype=bool) if sulcus is None else sulcus
         assert isinstance(sulcus, np.ndarray)
         assert len(sulcus) == n and sulcus.dtype == bool
+        self._sulcus = sulcus
 
         # ____________________ TEXTURES ____________________
         # Background texture :
@@ -531,16 +532,19 @@ class BrainVisual(Visual):
     @property
     def sulcus(self):
         """Get the sulcus value."""
-        pass
-        # return self._sulcus
+        if hasattr(self, self._sulcus) and isinstance(self._sulcus, np.ndarray):
+            return self._sulcus
+        else:
+            return None
 
     @sulcus.setter
     def sulcus(self, value):
         """Set sulcus value."""
-        assert isinstance(value, np.ndarray) and len(value) == len(self)
+        assert isinstance(value, np.ndarray) and len(value) == len(self._vertices)
         assert isinstance(value.dtype, bool)
         self._bgd_data[value] = 1.
         self._bgd_buffer.set_data(self._bgd_data)
+        self._sulcus = value
         self.update()
 
     # ----------- TRANSPARENT -----------
