@@ -15,7 +15,7 @@ import nibabel as nib
 
 __all__ = ('vispy_array', 'convert_meshdata', 'volume_to_mesh',
            'smoothing_matrix', 'mesh_edges', 'laplacian_smoothing', 
-           'volume_to_data')
+           'volume_to_data', 'invert_affine_matrix')
 
 
 logger = logging.getLogger('visbrain')
@@ -274,6 +274,17 @@ def laplacian_smoothing(vertices, faces, n_neighbors=-1):
     return new_vertices
 
 
+def invert_affine_matrix(affine : np.ndarray) -> np.ndarray:
+    assert affine.shape == (4,4), "Given affine is not of size (4,4)."
+    # get voxel sizes
+    vox_size = nib.affines.voxel_sizes(affine)
+    # change the translation
+    affine[:3, 3] =  np.abs(affine[:3, 3]/vox_size)
+    # inverse the scaling (voxel of 2mm -> rescale the mesh by .5)
+    affine[:3,:3] = np.where(affine[:3,:3], 1/affine[:3,:3], 0)
+
+    return affine
+
 def coregister_mesh_to_vol(vert, vol_mask, post_factor=1, affine=None):
     if affine is None:
         vox_xyz = np.argwhere(vol_mask)
@@ -285,15 +296,18 @@ def coregister_mesh_to_vol(vert, vol_mask, post_factor=1, affine=None):
         scale_factor = vol_xyz_size / vert_xyz_size
         vert = vert * scale_factor * post_factor
 
+        vert_xyz_size = np.ptp(vert, axis=0)
         vert_cent = vert_xyz_size / 2 + np.min(vert, axis=0) + 1
         vol_cent = vol_xyz_size / 2 + np.min(vox_xyz, axis=0) + 1
-
         trans_factor = vol_cent - vert_cent
         vert += trans_factor
 
     else:
+        assert isinstance(affine, np.ndarray), "Given parameter affine is not of type numpy.ndarray"
+        assert affine.shape == (4,4), f"Given affine array is not of shape (4,4) but instead {affine.shape}"
+        
+        affine = invert_affine_matrix(affine)
         vert = nib.affines.apply_affine(affine, vert)
-
     return vert
 
 
