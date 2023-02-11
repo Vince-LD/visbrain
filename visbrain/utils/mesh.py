@@ -15,7 +15,7 @@ import nibabel as nib
 
 __all__ = ('vispy_array', 'convert_meshdata', 'volume_to_mesh',
            'smoothing_matrix', 'mesh_edges', 'laplacian_smoothing', 
-           'volume_to_data', 'invert_affine_matrix')
+           'volume_to_data')
 
 
 logger = logging.getLogger('visbrain')
@@ -273,18 +273,6 @@ def laplacian_smoothing(vertices, faces, n_neighbors=-1):
         new_vertices[k, :] = vertices[to_smooth, :].mean(0).reshape(1, -1)
     return new_vertices
 
-
-def invert_affine_matrix(affine : np.ndarray) -> np.ndarray:
-    assert affine.shape == (4,4), "Given affine is not of size (4,4)."
-    # get voxel sizes
-    vox_size = nib.affines.voxel_sizes(affine)
-    # change the translation
-    affine[:3, 3] =  np.abs(affine[:3, 3]/vox_size)
-    # inverse the scaling (voxel of 2mm -> rescale the mesh by .5)
-    affine[:3,:3] = np.where(affine[:3,:3], 1/affine[:3,:3], 0)
-
-    return affine
-
 def coregister_mesh_to_vol(vert, vol_mask, post_factor=1, affine=None):
     if affine is None:
         vox_xyz = np.argwhere(vol_mask)
@@ -306,8 +294,10 @@ def coregister_mesh_to_vol(vert, vol_mask, post_factor=1, affine=None):
         assert isinstance(affine, np.ndarray), "Given parameter affine is not of type numpy.ndarray"
         assert affine.shape == (4,4), f"Given affine array is not of shape (4,4) but instead {affine.shape}"
         
-        affine = invert_affine_matrix(affine)
-        vert = nib.affines.apply_affine(affine, vert)
+        # nifti affine is vox2ras when we want ras2vox
+        # We simply invert it
+        affine_ras2vox = np.linalg.inv(affine)
+        vert = nib.affines.apply_affine(affine_ras2vox, vert)
     return vert
 
 
