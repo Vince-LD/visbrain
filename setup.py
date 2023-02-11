@@ -53,7 +53,7 @@ setup(
         "pyqt5",
         "pillow",
         "PyOpenGL",
-        "nilearn
+        "nilearn"
     ],
     extras_require={
         'full': ["mne", "tensorpac", "pandas", "xlrd", "scikit-image",
