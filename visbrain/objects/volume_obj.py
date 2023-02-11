@@ -255,9 +255,7 @@ class VolumeObj(_Volume):
         # _______________________ CHECKING _______________________
         # Create 3-D volume :
         vol_d = np.zeros((1, 1, 1), dtype=np.float32)
-        self._vol3d = visuals.Volume(vol_d, parent=self._node,
-                                     threshold=threshold, name='3-D Volume',
-                                     cmap=VOLUME_CMAPS[cmap])
+
         if preload:
             self(name, vol, hdr, threshold, cmap, method, select)
 
@@ -278,7 +276,9 @@ class VolumeObj(_Volume):
             threshold = 0.
         self._max_vol = vol.max()
         vol = normalize(vol)
-        self._vol3d.set_data(np.transpose(vol, (2, 1, 0)))
+        self._vol3d = visuals.Volume(np.transpose(vol, (2, 1, 0)), parent=self._node,
+                                     threshold=threshold, name='3-D Volume',
+                                     cmap=VOLUME_CMAPS[cmap])
         self._vol3d.transform = hdr
         self.method = method
         self.threshold = threshold

@@ -13,7 +13,7 @@ __all__ = ['add_brain_template', 'remove_brain_template',
 
 
 def add_brain_template(name, vertices, faces, normals=None, lr_index=None,
-                       tmpfile=False):
+                       tmpfile=False, sulcus=None):
     """Add a brain template to the default list.
 
     Parameters
@@ -50,6 +50,11 @@ def add_brain_template(name, vertices, faces, normals=None, lr_index=None,
     np.savez_compressed(path, vertices=vertices, faces=faces, normals=normals,
                         lr_index=lr_index)
     logger.info("Brain template saved (%s)." % path)
+
+    if any(sulcus!=0):
+        sulcus_file = path_to_visbrain_data(folder='templates', file=name + '_sulcus.npy')
+        np.save(sulcus_file, sulcus)
+        logger.info("Brain template sulcus saved (%s)." % sulcus_file)
 
 
 def remove_brain_template(name):

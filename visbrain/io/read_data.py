@@ -20,7 +20,8 @@ logger = logging.getLogger('visbrain')
 
 __all__ = ('read_mat', 'read_pickle', 'read_npy', 'read_npz', 'read_txt',
            'read_csv', 'read_json', 'read_stc', 'read_x3d', 'read_gii',
-           'read_obj', 'is_freesurfer_mesh_file', 'read_freesurfer_mesh')
+           'read_obj', 'is_freesurfer_mesh_file', 'read_freesurfer_mesh', 
+           'read_freesurfer_sulcus')
 
 
 def read_mat(path, vars=None):
@@ -249,28 +250,34 @@ def is_freesurfer_mesh_file(files):
         return is_lr and is_ext
     return all([_fcn_fs_file(k) for k in files])
 
-
-def read_freesurfer_mesh(files):
-    """Read Freesurfer mesh files and.
+def is_freesurfer_mesh_file(files, extensions=None):
+    """Test if a file or list of files are a Freesurfer meshes or some other Freesurfer files if extensions are set.
 
     Parameters
     ----------
     files : str | list
-        Single Freesurfer file (e.g. 'lh.inflated') or list of files
-        (e.g ['rh.inflated', 'lh.inflated'])
+        File or list of files
 
     Returns
     -------
-    vert : array_like
-        Vertices of shape (n_vertices, 3)
-    faces : array_like
-        Faces of shape (n_faces, 3)
-    lr_index : array_like
-        Left / right indices of shape (n_vertices,)
+    is_file : bool
+        Get if it's a Freesurfer file or not
     """
-    is_nibabel_installed(raise_error=True)
-    logger.info('Freesurfer file detected')
-    import nibabel as nib
+    files = [files] if isinstance(files, str) else files
+    if extensions is None:
+        extensions = ['.inflated', '.curv', '.white', '.orig', '.smoothwm', '.pial']
+    assert all(isinstance(ext, str) and ext.startswith('.') for ext in extensions)
+    def _fcn_fs_file(file):  # noqa
+        is_lr = any([k in file for k in ['lh.', 'rh.']])
+        is_ext = os.path.splitext(file)[1] in extensions
+        return is_lr and is_ext
+    return all([_fcn_fs_file(k) for k in files])
+
+
+
+def read_freesurfer_mesh(files):
+    logger.info('Freesurfer surface file detected')
+    from nilearn.surface import load_surf_mesh
     if isinstance(files, str):  # single file
         files = [files]
     assert len(files) in [1, 2], ("One or two freesurfer files should be "
@@ -279,13 +286,10 @@ def read_freesurfer_mesh(files):
     hemi = dict()
     for f, h in zip(files, head):
         _hemi = h.split('.')[0]
-        (_vert, _faces) = nib.freesurfer.read_geometry(f)
-        if _hemi == 'lh':
-            _vert[:, 0] -= np.max(_vert[:, 0])
-        else:
-            _vert[:, 0] -= np.min(_vert[:, 0])
-        hemi[_hemi] = (_vert, _faces)
-    # Vertices / faces construction depend on the number of files provided
+        nl_mesh = load_surf_mesh(f)
+        
+        hemi[_hemi] = (nl_mesh.coordinates, nl_mesh.faces)
+
     if len(hemi) == 1:  # one file provided
         _hemi = list(hemi.keys())[0]
         (vert, faces) = list(hemi.values())[0]
@@ -299,7 +303,89 @@ def read_freesurfer_mesh(files):
         faces = np.r_[f_l, f_r + f_l.max() + 1]
         # Left / right construction
         l_index = np.ones((v_l.shape[0],), dtype=bool)
-        r_index = np.zeros((v_l.shape[0],), dtype=bool)
+        r_index = np.zeros((v_r.shape[0],), dtype=bool)
         lr_index = np.r_[l_index, r_index]
         logger.info('    Build left and right hemispheres')
     return vert, faces, lr_index
+
+# def read_freesurfer_mesh(files):
+#     """Read Freesurfer mesh files and.
+
+#     Parameters
+#     ----------
+#     files : str | list
+#         Single Freesurfer file (e.g. 'lh.inflated') or list of files
+#         (e.g ['rh.inflated', 'lh.inflated'])
+
+#     Returns
+#     -------
+#     vert : array_like
+#         Vertices of shape (n_vertices, 3)
+#     faces : array_like
+#         Faces of shape (n_faces, 3)
+#     lr_index : array_like
+#         Left / right indices of shape (n_vertices,)
+#     """
+#     is_nibabel_installed(raise_error=True)
+#     logger.info('Freesurfer file detected')
+#     import nibabel as nib
+#     if isinstance(files, str):  # single file
+#         files = [files]
+#     assert len(files) in [1, 2], ("One or two freesurfer files should be "
+#                                   "provided")
+#     head = [os.path.split(k)[1] for k in files]
+#     hemi = dict()
+#     for f, h in zip(files, head):
+#         _hemi = h.split('.')[0]
+#         (_vert, _faces, _header) = nib.freesurfer.read_geometry(f, read_metadata=True)
+#         if 'cras' in _header:
+#             _vert += _header['cras']
+#         # if _hemi == 'lh':
+#         #     _vert[:, 0] -= np.max(_vert[:, 0])
+#         # else:
+#         #     _vert[:, 0] -= np.min(_vert[:, 0])
+#         hemi[_hemi] = (_vert, _faces)
+#     # Vertices / faces construction depend on the number of files provided
+#     if len(hemi) == 1:  # one file provided
+#         _hemi = list(hemi.keys())[0]
+#         (vert, faces) = list(hemi.values())[0]
+#         fcn = np.ones if _hemi == 'lh' else np.zeros
+#         lr_index = fcn((vert.shape[0],), dtype=bool)
+#         logger.info('    Build the %s hemisphere' % _hemi)
+#     else:               # left and right hemisphere are provided
+#         # Vertices / faces construction
+#         (v_l, f_l), (v_r, f_r) = hemi['lh'], hemi['rh']
+#         vert = np.r_[v_l, v_r]
+#         faces = np.r_[f_l, f_r + f_l.max() + 1]
+#         # Left / right construction
+#         l_index = np.ones((v_l.shape[0],), dtype=bool)
+#         r_index = np.zeros((v_r.shape[0],), dtype=bool)
+#         lr_index = np.r_[l_index, r_index]
+#         logger.info('    Build left and right hemispheres')
+#     return vert, faces, lr_index
+
+
+def read_freesurfer_sulcus(files):
+    logger.info('Freesurfer sulcus file detected')
+    from nilearn.surface import load_surf_data
+
+    if isinstance(files, str):  # single file
+        files = [files]
+    assert len(files) in [1, 2], ("One or two freesurfer sulc files should be "
+                                  "provided")
+    head = [os.path.split(k)[1] for k in files]
+    hemi = dict()
+    for f, h in zip(files, head):
+        _hemi = h.split('.')[0]
+        nl_sulc = load_surf_data(f)
+        nl_sulc = np.where(nl_sulc >  0, True, False)
+        hemi[_hemi] = (nl_sulc)
+
+    if len(hemi) == 1:  # one file provided
+        sulc = list(hemi.values())[0]
+        logger.info('    Build the %s hemisphere sulcus' % _hemi)
+    else:               # left and right hemisphere are provided
+        # Vertices / faces construction
+        sulc = np.concatenate((hemi['lh'], hemi['rh']))
+        logger.info('    Build left and right hemispheres sulcus')
+    return sulc

@@ -6,6 +6,7 @@ from functools import wraps
 import numpy as np
 import numpy.core.defchararray as npchar
 from scipy.spatial.distance import cdist
+from scipy.spatial import cKDTree
 
 from vispy import scene
 from vispy.geometry.isosurface import isosurface
@@ -468,7 +469,7 @@ class RoiObj(_Volume):
     ###########################################################################
 
     def select_roi(self, select=.5, unique_color=False, roi_to_color=None,
-                   smooth=3, translucent=False):
+                   smooth=3, translucent=False, gapless_joints=True):
         """Select several Region Of Interest (ROI).
 
         Parameters
@@ -489,7 +490,7 @@ class RoiObj(_Volume):
         vert = np.array([])
         # Use specific colors :
         if isinstance(roi_to_color, dict):
-            select = roi_to_color.keys()
+            select = list(roi_to_color.keys())
             unique_color = True
         if not unique_color:
             vert, faces = self._select_roi(self._vol.copy(), select, smooth)
@@ -508,32 +509,29 @@ class RoiObj(_Volume):
                 col_unique = np.random.uniform(.1, .9, (len(select), 4))
                 col_unique[..., -1] = 1.
                 logger.info("    Random color are going to be used.")
-            # Get vertices and faces of each ROI :
-            for i, k in enumerate(select):
-                v, f = self._select_roi(self._vol.copy(), int(k), smooth)
-                # Concatenate vertices / faces :
-                faces = np.r_[faces, f + faces.max() + 1] if faces.size else f
-                vert = np.r_[vert, v] if vert.size else v
-                # Concatenate color :
-                col = np.full((v.shape[0],), i)
-                data = np.r_[data, col] if data.size else col
-        if vert.size:
-            # Apply hdr transformation to vertices :
-            vert_hdr = self._hdr.map(vert)[:, 0:-1]
-            logger.debug("Apply hdr transformation to vertices")
-            if not self:
-                logger.debug("ROI mesh defined")
-                self.mesh = BrainMesh(vertices=vert_hdr, faces=faces,
-                                      parent=self._node)
-                self.mesh.translucent = translucent
+
+            if gapless_joints:
+                selected_volume = np.isin(self._vol, select) * self._vol
+
+                vert, faces = self._select_roi(selected_volume, select, smooth)
+
+                voxel_indexes = np.argwhere(selected_volume)
+                vol_kdt = cKDTree(voxel_indexes)
+                # Closest voxel coordinates for each vertex
+                closest_points = voxel_indexes[vol_kdt.query(vert, k=1)[1]]
+                # Roi value at each vertex
+                data = selected_volume[closest_points[:,0],closest_points[:,1],closest_points[:,2]]
+
             else:
-                logger.debug("ROI mesh already exist")
-                self.mesh.set_data(vertices=vert_hdr, faces=faces)
-            if unique_color:
-                self.mesh.add_overlay(data, cmap=col_unique,
-                                      interpolation='linear', to_overlay=0)
-        else:
-            raise ValueError("No vertices found for this ROI")
+                # Get vertices and faces of each ROI :
+                for i, k in enumerate(select):
+                    v, f = self._select_roi(self._vol.copy(), int(k), smooth)
+                    # Concatenate vertices / faces :
+                    faces = np.r_[faces, f + faces.max() + 1] if faces.size else f
+                    vert = np.r_[vert, v] if vert.size else v
+                    # Concatenate color :
+                    col = np.full((v.shape[0],), i)
+                    data = np.r_[data, col] if data.size else col
 
     def get_centroids(self, select):
         """Get the (x, y, z) coordinates of the center of a ROI.
@@ -595,6 +593,7 @@ class RoiObj(_Volume):
         self.mesh._camera.scale_factor = sc
         self.mesh._camera.distance = 4 * sc
         self.mesh._camera.center = center
+
         self.camera = self.mesh._camera
         return self.mesh._camera
 
@@ -740,18 +739,18 @@ class RoiObj(_Volume):
     def mask_color(self, value):
         """Set mask_color value."""
         self.mesh.mask_color = value
-
-    # ----------- CAMERA -----------
-    @property
-    def camera(self):
-        """Get the camera value."""
-        return self._camera
-
-    @camera.setter
-    @wrap_setter_properties
-    def camera(self, value):
-        """Set camera value."""
-        self.mesh.set_camera(value)
+    #
+    # # ----------- CAMERA -----------
+    # @property
+    # def camera(self):
+    #     """Get the camera value."""
+    #     return self.camera
+    #
+    # @camera.setter
+    # @wrap_setter_properties
+    # def camera(self, value):
+    #     """Set camera value."""
+    #     self.mesh.set_camera(value)
 
 
 class CombineRoi(_CombineVolume):
@@ -775,7 +774,7 @@ class CombineRoi(_CombineVolume):
     @property
     def camera(self):
         """Get the camera value."""
-        return self._camera
+        return self.camera
 
     @camera.setter
     def camera(self, value):

@@ -44,7 +44,7 @@ try:
     ip = get_ipython()
     CONFIG['MPL_RENDER'] = True
     import vispy
-    vispy.use('PyQt5')
+    vispy.use(app='PyQt5')
 except NameError:
     pass
 

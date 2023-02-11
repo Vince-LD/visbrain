@@ -9,9 +9,13 @@ from vispy.geometry.isosurface import isosurface
 
 from .sigproc import smooth_3d
 
+from scipy.spatial import cKDTree
+
+import nibabel as nib
 
 __all__ = ('vispy_array', 'convert_meshdata', 'volume_to_mesh',
-           'smoothing_matrix', 'mesh_edges', 'laplacian_smoothing')
+           'smoothing_matrix', 'mesh_edges', 'laplacian_smoothing', 
+           'volume_to_data')
 
 
 logger = logging.getLogger('visbrain')
@@ -268,3 +272,104 @@ def laplacian_smoothing(vertices, faces, n_neighbors=-1):
         # Take the mean of selected vertices :
         new_vertices[k, :] = vertices[to_smooth, :].mean(0).reshape(1, -1)
     return new_vertices
+
+def coregister_mesh_to_vol(vert, vol_mask, post_factor=1, affine=None):
+    if affine is None:
+        vox_xyz = np.argwhere(vol_mask)
+
+        vert_xyz_size = np.ptp(vert, axis=0)
+        vol_xyz_size = np.ptp(vox_xyz, axis=0)
+
+
+        scale_factor = vol_xyz_size / vert_xyz_size
+        vert = vert * scale_factor * post_factor
+
+        vert_xyz_size = np.ptp(vert, axis=0)
+        vert_cent = vert_xyz_size / 2 + np.min(vert, axis=0) + 1
+        vol_cent = vol_xyz_size / 2 + np.min(vox_xyz, axis=0) + 1
+        trans_factor = vol_cent - vert_cent
+        vert += trans_factor
+
+    else:
+        assert isinstance(affine, np.ndarray), "Given parameter affine is not of type numpy.ndarray"
+        assert affine.shape == (4,4), f"Given affine array is not of shape (4,4) but instead {affine.shape}"
+        
+        # nifti affine is vox2ras when we want ras2vox
+        # We simply invert it
+        affine_ras2vox = np.linalg.inv(affine)
+        vert = nib.affines.apply_affine(affine_ras2vox, vert)
+    return vert
+
+
+def volume_to_data(vol, vertices, select=None, radius=3., fill_value=0, coreg=None):
+    """For each given vertex, gets the closest voxel value from the volume
+    (distance wise).
+
+    Parameters
+    ----------
+    vol : array_like
+        Volume from which to extract voxel values.
+    vertices : array_like
+        Array of vertices (n_vertices, 3) for which data must be extracted.
+    select : list/array_like | None
+        The values (Rois) from the volume to use. Useful if the objective is
+        to take only a subset of the total volume.
+    radius : float | .3
+        Maximum distance from which a vertex can get a voxel value. If you
+        observe holes in the mesh colors, try increase this parameter.
+        However, keep as low as possible if you use the "select" parameter
+        as it can decrease the precision on the edge of the given volume.
+    coreg : True | np.ndarray | None
+        * If True will attemps to ofset xyz vertices position to fit the 
+        voxel position. This method is very simplistic and quite raw.
+        * We recommand you to use the affine contained in the NIfTI file 
+        which is a numpy array of 4x4. We use the last column to offset the 
+        position of all vertices. This allow for perfect matching of the 
+        surface and CORRESPONDING VOLUME (provided the volume is the same 
+        brain as the template surface used).
+
+    Returns
+    -------
+    data : array_like
+        Data array with a value for each given vertex/valid_vertices.
+    valid_vertices : array_like
+        Array of vertices that have been given data. Size is ether equal to
+        the input vertices array or smaller (if some vertices where too far from
+        the volume voxels to get a value).
+    """
+    if select is not None:
+        selected_volume = np.isin(vol, select) * vol
+    else:
+        selected_volume = vol
+
+    if coreg is True:
+        vol_mask = np.where(selected_volume, 1, 0)
+        vertices = coregister_mesh_to_vol(vertices, vol_mask, post_factor=1, affine=None)
+    if isinstance(coreg, np.ndarray):
+        vol_mask = np.where(selected_volume, 1, 0)
+        vertices = coregister_mesh_to_vol(vertices, vol_mask, post_factor=1, affine=coreg)
+
+    voxel_indexes = np.argwhere(selected_volume)
+    vol_kdt = cKDTree(voxel_indexes)
+
+    # Closest voxel coordinates for each vertex
+    dist, ind = vol_kdt.query(vertices, k=1)
+    closest_points = voxel_indexes[ind]
+
+    valid_vertices = np.where(dist<=radius)[0]
+    valid_points = closest_points[valid_vertices]
+
+    # Voxel value at each vertex
+    data = selected_volume[valid_points[:,0],valid_points[:,1],valid_points[:,2]]
+
+    if fill_value != 0:
+        discarded_vertices = np.where(dist>radius)[0]
+        filled_data = np.full(discarded_vertices.shape[0], fill_value)
+
+        data = np.concatenate((data, filled_data))
+        valid_vertices = np.concatenate((valid_vertices, discarded_vertices))
+        
+    return data, valid_vertices
+
+
+

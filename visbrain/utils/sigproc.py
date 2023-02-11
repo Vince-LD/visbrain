@@ -352,11 +352,13 @@ def smooth_3d(vol, smooth_factor=3, correct=True):
     # No smoothing :
     if (not isinstance(smooth_factor, int)) or (smooth_factor < 3):
         return vol, tf
+    # binarizing volume to apply a homogenous smoothing :
+    bin_vol = np.where(vol>0, 1, 0)
     # Smoothing array :
     sz = np.full((3,), smooth_factor, dtype=int)
     smooth = np.ones([smooth_factor] * 3) / np.prod(sz)
     # Apply smoothing :
-    sm = fftconvolve(vol, smooth, mode='same')
+    sm = fftconvolve(bin_vol, smooth, mode='same')
     if correct:
         # Get the shape of the vol and the one with 'full' convolution :
         vx, vy, vz = vol.shape

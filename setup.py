@@ -52,7 +52,8 @@ setup(
         "matplotlib>=1.5.5",
         "pyqt5",
         "pillow",
-        "PyOpenGL"
+        "PyOpenGL",
+        "nilearn"
     ],
     extras_require={
         'full': ["mne", "tensorpac", "pandas", "xlrd", "scikit-image",
