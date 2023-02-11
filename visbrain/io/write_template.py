@@ -51,7 +51,7 @@ def add_brain_template(name, vertices, faces, normals=None, lr_index=None,
                         lr_index=lr_index)
     logger.info("Brain template saved (%s)." % path)
 
-    if isinstance(sulcus, np.ndarray):
+    if any(sulcus!=0):
         sulcus_file = path_to_visbrain_data(folder='templates', file=name + '_sulcus.npy')
         np.save(sulcus_file, sulcus)
         logger.info("Brain template sulcus saved (%s)." % sulcus_file)

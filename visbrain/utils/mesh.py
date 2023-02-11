@@ -11,6 +11,7 @@ from .sigproc import smooth_3d
 
 from scipy.spatial import cKDTree
 
+import nibabel as nib
 
 __all__ = ('vispy_array', 'convert_meshdata', 'volume_to_mesh',
            'smoothing_matrix', 'mesh_edges', 'laplacian_smoothing', 
@@ -291,7 +292,7 @@ def coregister_mesh_to_vol(vert, vol_mask, post_factor=1, affine=None):
         vert += trans_factor
 
     else:
-        vert = vert - affine[:3, 3]
+        vert = nib.affines.apply_affine(affine, vert)
 
     return vert
 
